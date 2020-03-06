@@ -1,15 +1,19 @@
 const Remittance = artifacts.require("./Remittance.sol");
+const helper = require('./utils/utils.js');
 const truffleAssert = require('truffle-assertions');
 
 const { BN, toBN, soliditySha3 } = web3.utils
 require('chai').use(require('chai-bn')(BN)).should();
+
+const HOURS = 3600;
+const TWELVE = 12;
 
 // ganache-cli --accounts=10 --host=0.0.0.0
 
 contract("Remittance", accounts => {
     describe("Testing Remittance contract", () => {
 
-        let splitter, alice, bob, carol, anyone, remittance, secret1, secret2, secret1Hex, secret2Hex, redeemSecretHash;
+        let splitter, alice, bob, carol, anyone, remittance, claimableAfterNHours, secret1, secret2, secret1Hex, secret2Hex, redeemSecretHash;
 
         beforeEach("Fresh contract & accounts", async () => {
             // accounts
@@ -26,7 +30,8 @@ contract("Remittance", accounts => {
             redeemSecretHash = soliditySha3(secret1Hex, secret2Hex);
 
             // deploy Remittance
-            remittance = await Remittance.new(redeemSecretHash, 1, false, {from: alice, value: 1})
+            claimableAfterNHours = TWELVE;
+            remittance = await Remittance.new(redeemSecretHash, claimableAfterNHours, false, {from: alice, value: 1})
             const contractBalance = await web3.eth.getBalance(remittance.address)
             assert.strictEqual(contractBalance.toString(10), "1", "Contract balance should be 1");
         });
@@ -49,6 +54,27 @@ contract("Remittance", accounts => {
                 const effectiveRedeem = toBN(balanceAfter).sub(toBN(balanceBefore))
                     .add(toBN(redeemCost)).toString(10);
                 assert.strictEqual(effectiveRedeem.toString(10), "1");
+            });
+            it("should claim", async () => {
+                // time travel to claimable date
+                await helper.advanceTimeAndBlock(TWELVE * HOURS);
+
+                // claim
+                const balanceBefore = await web3.eth.getBalance(alice);
+                const receipt = await remittance.claim({from: alice});
+
+                // check claim
+                truffleAssert.eventEmitted(receipt, 'ClaimEvent', { recipient: alice, amount: toBN(1) });
+
+                // claim amount
+                const claimGasUsed = receipt.receipt.gasUsed;
+                const tx = await web3.eth.getTransaction(receipt.tx);
+                const claimGasPrice = tx.gasPrice;
+                const claimCost = toBN(claimGasUsed).mul(toBN(claimGasPrice));
+                const balanceAfter = await web3.eth.getBalance(alice);
+                const effectiveClaim = toBN(balanceAfter).sub(toBN(balanceBefore))
+                    .add(toBN(claimCost)).toString(10);
+                assert.strictEqual(effectiveClaim.toString(10), "1");
             });
         });
 

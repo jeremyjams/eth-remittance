@@ -10,13 +10,13 @@ contract Remittance is Pausable {
     event RedeemEvent(address recipient, uint amount);
     event ClaimEvent(address recipient, uint amount);
 
-    constructor(bytes32 _redeemSecretHash, uint8 _hoursClaimPeriod, bool _paused) Pausable(_paused) public payable {
+    constructor(bytes32 _redeemSecretHash, uint8 _claimableAfterNHours, bool _paused) Pausable(_paused) public payable {
         require(msg.value > 0, "Funds required");
         require(_redeemSecretHash != 0, "Empty RedeemSecretHash");//prevents badly formatted construction
-        require(_hoursClaimPeriod < 24 hours, "Claim period should be less than 24 hours");//prevents badly formatted construction
+        require(_claimableAfterNHours < 24 hours, "Claim period should be less than 24 hours");//prevents badly formatted construction
 
         redeemSecretHash = _redeemSecretHash;
-        claimableDate = now + _hoursClaimPeriod * 1 hours;
+        claimableDate = now + _claimableAfterNHours * 1 hours;
     }
 
     /*
