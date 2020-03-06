@@ -55,6 +55,12 @@ contract("Remittance", accounts => {
                     .add(toBN(redeemCost)).toString(10);
                 assert.strictEqual(effectiveRedeem.toString(10), "1");
             });
+            it("should not redeem since", async () => {
+                //TODO
+            });
+        });
+
+        describe("Claim", () => {
             it("should claim", async () => {
                 // time travel to claimable date
                 await helper.advanceTimeAndBlock(TWELVE * HOURS);
@@ -73,8 +79,11 @@ contract("Remittance", accounts => {
                 const claimCost = toBN(claimGasUsed).mul(toBN(claimGasPrice));
                 const balanceAfter = await web3.eth.getBalance(alice);
                 const effectiveClaim = toBN(balanceAfter).sub(toBN(balanceBefore))
-                    .add(toBN(claimCost)).toString(10);
+                     .add(toBN(claimCost)).toString(10);
                 assert.strictEqual(effectiveClaim.toString(10), "1");
+            });
+            it("should not claim since", async () => {
+                //TODO
             });
         });
 

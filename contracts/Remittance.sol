@@ -33,7 +33,7 @@ contract Remittance is Pausable {
         require(success, "Redeem transfer failed");
     }
 
-    function claim() public onlyOwner onlyAfter(claimableDate) returns (bool success) {//onlyAfter vs whenKilled
+    function claim() public onlyOwner onlyAfter(claimableDate) returns (bool success) {
         require(address(this).balance > 0, "Nothing to claim");
 
         emit ClaimEvent(msg.sender, address(this).balance);
