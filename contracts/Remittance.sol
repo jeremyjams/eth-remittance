@@ -5,18 +5,18 @@ import "./Pausable.sol";
 contract Remittance is Pausable {
 
     bytes32 private redeemSecretHash;
-    uint private claimableStartDate;
+    uint private claimableDate;
 
     event RedeemEvent(address recipient, uint amount);
     event ClaimEvent(address recipient, uint amount);
 
-    constructor(bytes32 _redeemSecretHash, uint8 _claimableHoursAfter, bool _pausable) Pausable(_pausable) public payable {
+    constructor(bytes32 _redeemSecretHash, uint8 _hoursClaimPeriod, bool _paused) Pausable(_paused) public payable {
         require(msg.value > 0, "Funds required");
         require(_redeemSecretHash != 0, "Empty RedeemSecretHash");//prevents badly formatted construction
-        require(_claimableHoursAfter < 10 days, "Empty RedeemSecretHash");//prevents badly formatted construction
+        require(_hoursClaimPeriod < 24 hours, "Claim period should be less than 24 hours");//prevents badly formatted construction
 
         redeemSecretHash = _redeemSecretHash;
-        claimableStartDate = now + _claimableHoursAfter * 1 hours;
+        claimableDate = now + _hoursClaimPeriod * 1 hours;
     }
 
     /*
@@ -33,7 +33,7 @@ contract Remittance is Pausable {
         require(success, "Redeem transfer failed");
     }
 
-    function claim() public onlyOwner onlyAfter(claimableStartDate) returns (bool success) {//onlyAfter vs whenKilled
+    function claim() public onlyOwner onlyAfter(claimableDate) returns (bool success) {//onlyAfter vs whenKilled
         require(address(this).balance > 0, "Nothing to claim");
 
         emit ClaimEvent(msg.sender, address(this).balance);
