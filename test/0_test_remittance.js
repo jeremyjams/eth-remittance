@@ -13,7 +13,7 @@ const TWELVE = 12;
 contract("Remittance", accounts => {
     describe("Testing Remittance contract", () => {
 
-        let remittance, alice, bob, carol, anyone, claimableAfterTwelveHours, password, hexPassword, challenge, challengeLib;
+        let remittance, alice, bob, carol, anyone, claimableAfterTwelveHours, password, hexPassword, challenge;
 
         beforeEach("Fresh contract & accounts", async () => {
             // accounts
@@ -29,13 +29,13 @@ contract("Remittance", accounts => {
             // challenge & password
             password = "p4ssw0rd";
             hexPassword = web3.utils.padRight(web3.utils.asciiToHex(password), 64);
-            challenge = soliditySha3(remittance.address, carol, hexPassword);
+            challenge = await remittance.generateChallenge.call(carol, hexPassword);
         });
 
         describe("Challenge", () => {
             it("should generate challenge", async () => {
-                const generatedChallenge = await remittance.generateChallenge.call(carol, hexPassword);
-                assert.strictEqual(generatedChallenge, challenge, "Generated challenge should be valid");
+                const expectedChallenge = soliditySha3(remittance.address, carol, hexPassword);
+                assert.strictEqual(challenge, expectedChallenge, "Generated challenge should be valid");
             });
             it("should not generate challenge since", async () => {
                 //TODO
