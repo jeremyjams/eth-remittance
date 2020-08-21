@@ -1,5 +1,4 @@
 const Remittance = artifacts.require("./Remittance.sol");
-const Challenge = artifacts.require("./Challenge.sol");
 const helper = require('./utils/utils.js');
 const truffleAssert = require('truffle-assertions');
 
@@ -14,7 +13,7 @@ const TWELVE = 12;
 contract("Remittance", accounts => {
     describe("Testing Remittance contract", () => {
 
-        let remittance, alice, bob, carol, anyone, claimableAfterNHours, password, hexPassword, challenge, challengeLib;
+        let remittance, alice, bob, carol, anyone, claimableAfterTwelveHours, password, hexPassword, challenge, challengeLib;
 
         beforeEach("Fresh contract & accounts", async () => {
             // accounts
@@ -24,11 +23,8 @@ contract("Remittance", accounts => {
             anyone = accounts[9]
 
             // deploy Remittance
-            claimableAfterNHours = TWELVE;
-            remittance = await Remittance.new(claimableAfterNHours, false, {from: carol});
-
-            // deploy challenge lib
-            challengeLib = await Challenge.new({from: carol});
+            claimableAfterTwelveHours = TWELVE;
+            remittance = await Remittance.new(false, {from: carol});
 
             // challenge & password
             password = "p4ssw0rd";
@@ -38,7 +34,7 @@ contract("Remittance", accounts => {
 
         describe("Challenge", () => {
             it("should generate challenge", async () => {
-                const generatedChallenge = await challengeLib.generate.call(remittance.address, carol, hexPassword);
+                const generatedChallenge = await remittance.generateChallenge.call(carol, hexPassword);
                 assert.strictEqual(generatedChallenge, challenge, "Generated challenge should be valid");
             });
             it("should not generate challenge since", async () => {
@@ -49,8 +45,12 @@ contract("Remittance", accounts => {
         describe("Grant", () => {
             it("should grant", async () => {
                 //grant
-                const grantReceipt = await remittance.grant(challenge, {from: alice, value: 1});
-                truffleAssert.eventEmitted(grantReceipt, 'GrantEvent', { challenge: challenge, sender: alice, amount: toBN(1) }); //move to grant test
+                const grantReceipt = await remittance.grant(challenge, claimableAfterTwelveHours, {from: alice, value: 1});
+                const lastBlock = await web3.eth.getBlock("latest")
+                const now = lastBlock.timestamp
+
+                truffleAssert.eventEmitted(grantReceipt, 'GrantEvent', { challenge: challenge, sender: alice,
+                    amount: toBN(1), claimableDate: toBN(now + 12 * 3600) }); //move to grant test
                 const grant = await remittance.grants(challenge);
                 assert.strictEqual(grant.amount.toString(10), "1", "Grant amount should be 1");
             });
@@ -62,7 +62,7 @@ contract("Remittance", accounts => {
         describe("Redeem", () => {
             it("should redeem", async () => {
                 //grant
-                await remittance.grant(challenge, {from: alice, value: 1});
+                await remittance.grant(challenge, claimableAfterTwelveHours, {from: alice, value: 1});
 
                 // redeem
                 const balanceBefore = await web3.eth.getBalance(carol);
@@ -89,9 +89,10 @@ contract("Remittance", accounts => {
         describe("Claim", () => {
             it("should claim", async () => {
                 //grant
-                await remittance.grant(challenge, {from: alice, value: 1});
+                await remittance.grant(challenge, claimableAfterTwelveHours, {from: alice, value: 1});
 
                 // time travel to claimable date
+                // note: could use ganache-time-traveler
                 await helper.advanceTimeAndBlock(TWELVE * HOURS);
 
                 // claim
