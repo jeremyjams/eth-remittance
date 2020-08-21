@@ -1,4 +1,5 @@
 const Remittance = artifacts.require("./Remittance.sol");
+const Challenge = artifacts.require("./Challenge.sol");
 const helper = require('./utils/utils.js');
 const truffleAssert = require('truffle-assertions');
 
@@ -13,7 +14,7 @@ const TWELVE = 12;
 contract("Remittance", accounts => {
     describe("Testing Remittance contract", () => {
 
-        let remittance, alice, bob, carol, anyone, claimableAfterNHours, secret1, secret2, secret1Hex, secret2Hex, redeemSecretHash;
+        let remittance, alice, bob, carol, anyone, claimableAfterNHours, password, hexPassword, challenge, challengeLib;
 
         beforeEach("Fresh contract & accounts", async () => {
             // accounts
@@ -22,25 +23,35 @@ contract("Remittance", accounts => {
             carol = accounts[2]
             anyone = accounts[9]
 
-            // secret hashes
-            secret1 = "a";
-            secret2 = "b";
-            secret1Hex = web3.utils.padRight(web3.utils.asciiToHex(secret1), 64);
-            secret2Hex = web3.utils.padRight(web3.utils.asciiToHex(secret2), 64);
-            redeemSecretHash = soliditySha3(secret1Hex, secret2Hex);
-
             // deploy Remittance
             claimableAfterNHours = TWELVE;
             remittance = await Remittance.new(claimableAfterNHours, false, {from: carol});
+
+            // deploy challenge lib
+            challengeLib = await Challenge.new({from: carol});
+
+            // challenge & password
+            password = "p4ssw0rd";
+            hexPassword = web3.utils.padRight(web3.utils.asciiToHex(password), 64);
+            challenge = soliditySha3(remittance.address, carol, hexPassword);
+        });
+
+        describe("Challenge", () => {
+            it("should generate challenge", async () => {
+                const generatedChallenge = await challengeLib.generate.call(remittance.address, carol, hexPassword);
+                assert.strictEqual(generatedChallenge, challenge, "Generated challenge should be valid");
+            });
+            it("should not generate challenge since", async () => {
+                //TODO
+            });
         });
 
         describe("Grant", () => {
             it("should grant", async () => {
                 //grant
-                const grantReceipt = await remittance.grant(redeemSecretHash, {from: alice, value: 1});
-                truffleAssert.eventEmitted(grantReceipt, 'GrantEvent', { secretHash: redeemSecretHash, sender: alice, amount: toBN(1) }); //move to grant test
-                const grant = await remittance.grants(redeemSecretHash);
-                console.log(grant.amount)
+                const grantReceipt = await remittance.grant(challenge, {from: alice, value: 1});
+                truffleAssert.eventEmitted(grantReceipt, 'GrantEvent', { challenge: challenge, sender: alice, amount: toBN(1) }); //move to grant test
+                const grant = await remittance.grants(challenge);
                 assert.strictEqual(grant.amount.toString(10), "1", "Grant amount should be 1");
             });
             it("should not grant since", async () => {
@@ -51,14 +62,14 @@ contract("Remittance", accounts => {
         describe("Redeem", () => {
             it("should redeem", async () => {
                 //grant
-                await remittance.grant(redeemSecretHash, {from: alice, value: 1});
+                await remittance.grant(challenge, {from: alice, value: 1});
 
                 // redeem
                 const balanceBefore = await web3.eth.getBalance(carol);
-                const receipt = await remittance.redeem(redeemSecretHash, secret1Hex, secret2Hex, {from: carol});
+                const receipt = await remittance.redeem(challenge, hexPassword, {from: carol});
 
                 // check redeem
-                truffleAssert.eventEmitted(receipt, 'RedeemEvent', { secretHash: redeemSecretHash, recipient: carol, amount: toBN(1) });
+                truffleAssert.eventEmitted(receipt, 'RedeemEvent', { challenge: challenge, recipient: carol, amount: toBN(1) });
 
                 // redeem amount
                 const redeemGasUsed = receipt.receipt.gasUsed;
@@ -78,17 +89,17 @@ contract("Remittance", accounts => {
         describe("Claim", () => {
             it("should claim", async () => {
                 //grant
-                await remittance.grant(redeemSecretHash, {from: alice, value: 1});
+                await remittance.grant(challenge, {from: alice, value: 1});
 
                 // time travel to claimable date
                 await helper.advanceTimeAndBlock(TWELVE * HOURS);
 
                 // claim
                 const balanceBefore = await web3.eth.getBalance(alice);
-                const receipt = await remittance.claim(redeemSecretHash, {from: alice});
+                const receipt = await remittance.claim(challenge, {from: alice});
 
                 // check claim
-                truffleAssert.eventEmitted(receipt, 'ClaimEvent', { secretHash: redeemSecretHash, recipient: alice, amount: toBN(1) });
+                truffleAssert.eventEmitted(receipt, 'ClaimEvent', { challenge: challenge, recipient: alice, amount: toBN(1) });
 
                 // claim amount
                 const claimGasUsed = receipt.receipt.gasUsed;
