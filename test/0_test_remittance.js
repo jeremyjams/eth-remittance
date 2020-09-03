@@ -1,6 +1,7 @@
 const Remittance = artifacts.require("./Remittance.sol");
 const helper = require('./utils/utils.js');
 const truffleAssert = require('truffle-assertions');
+const timeMachine = require('ganache-time-traveler');
 
 const { BN, toBN, soliditySha3 } = web3.utils
 require('chai').use(require('chai-bn')(BN)).should();
@@ -54,8 +55,15 @@ contract("Remittance", accounts => {
                 const grant = await remittance.grants(challenge);
                 assert.strictEqual(grant.amount.toString(10), "1", "Grant amount should be 1");
             });
-            it("should not grant since", async () => {
-                //TODO
+            it("should not grant since already use challenge", async () => {
+                // grant
+                const grantReceipt = await remittance.grant(challenge, claimableAfterTwelveHours, {from: alice, value: 1});
+
+                // grant with already used challenge
+                await truffleAssert.reverts(
+                    remittance.grant(challenge, claimableAfterTwelveHours, {from: anyone, value: 1}),
+                    "Challenge already used by someone"
+                );
             });
         });
 
@@ -81,8 +89,26 @@ contract("Remittance", accounts => {
                     .add(toBN(redeemCost)).toString(10);
                 assert.strictEqual(effectiveRedeem.toString(10), "1");
             });
-            it("should not redeem since", async () => {
-                //TODO
+            it("should not redeem since bad sender", async () => {
+                //grant
+                await remittance.grant(challenge, claimableAfterTwelveHours, {from: alice, value: 1});
+
+                // redeem
+                await truffleAssert.reverts(
+                    remittance.redeem(challenge, hexPassword, {from: anyone}),
+                    "Invalid sender or password"
+                );
+            });
+            it("should not redeem since bad password", async () => {
+                //grant
+                await remittance.grant(challenge, claimableAfterTwelveHours, {from: alice, value: 1});
+
+                // redeem
+                badHexPassword = web3.utils.padRight(web3.utils.asciiToHex("b4dpwd"), 64);
+                await truffleAssert.reverts(
+                    remittance.redeem(challenge, badHexPassword, {from: carol}),
+                    "Invalid sender or password"
+                );
             });
         });
 
@@ -92,8 +118,7 @@ contract("Remittance", accounts => {
                 await remittance.grant(challenge, claimableAfterTwelveHours, {from: alice, value: 1});
 
                 // time travel to claimable date
-                // note: could use ganache-time-traveler
-                await helper.advanceTimeAndBlock(TWELVE * HOURS);
+                await timeMachine.advanceTimeAndBlock(TWELVE * HOURS);
 
                 // claim
                 const balanceBefore = await web3.eth.getBalance(alice);
@@ -112,8 +137,27 @@ contract("Remittance", accounts => {
                      .add(toBN(claimCost)).toString(10);
                 assert.strictEqual(effectiveClaim.toString(10), "1");
             });
-            it("should not claim since", async () => {
-                //TODO
+            it("should not claim since not after clamable date", async () => {
+                //grant
+                await remittance.grant(challenge, claimableAfterTwelveHours, {from: alice, value: 1});
+
+                // claim
+                const balanceBefore = await web3.eth.getBalance(alice);
+                await truffleAssert.reverts(
+                    remittance.claim(challenge, {from: alice}),
+                    "Should wait claimable date"
+                );
+            });
+            it("should not claim since not sender of grant", async () => {
+                //grant
+                await remittance.grant(challenge, claimableAfterTwelveHours, {from: anyone, value: 1});
+
+                // claim
+                const balanceBefore = await web3.eth.getBalance(alice);
+                await truffleAssert.reverts(
+                    remittance.claim(challenge, {from: alice}),
+                    "Sender is not sender of grant"
+                );
             });
         });
 

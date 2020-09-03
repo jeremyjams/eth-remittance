@@ -33,7 +33,7 @@ contract Remittance is Pausable {
     function grant(bytes32 challenge, uint8 claimableAfterNHours) public payable whenNotPaused {
         require(msg.value > 0, "Funds required");
         require(challenge != 0, "Empty challenge");//prevents locking bad formatted grant
-        require(grants[challenge].sender == address(0), "challenge already used by someone");//prevents reusing same secrets
+        require(grants[challenge].sender == address(0), "Challenge already used by someone");//prevents reusing same secrets
         require(claimableAfterNHours < MAX_CLAIMABLE_AFTER_N_HOURS, "Claim period should be less than 24 hours");//prevents badly formatted construction
 
         grants[challenge].amount = msg.value;
@@ -53,7 +53,7 @@ contract Remittance is Pausable {
         require(password != 0, "Empty password");
 
         bytes32 challenge = generateChallenge(msg.sender, password);
-        require(challenge == _challenge, "Invalid password");
+        require(challenge == _challenge, "Invalid sender or password");
 
         uint amount = grants[challenge].amount;
         grants[challenge].amount = 0;//avoid reentrancy with non-zero amount
