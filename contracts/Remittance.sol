@@ -7,6 +7,7 @@ contract Remittance is Pausable {
     // bytes32 challenge => Grant grant, where challenge is the ID/puzzle of the grant required to solve for redeeming funds
     mapping(bytes32 => Grant) public grants;
     uint public constant MAX_CLAIMABLE_AFTER_N_HOURS = 24 hours;
+    uint public cut;
 
     struct Grant {
         address sender;
@@ -18,7 +19,9 @@ contract Remittance is Pausable {
     event RedeemEvent(bytes32 indexed challenge, address indexed recipient, uint amount);
     event ClaimEvent(bytes32 indexed challenge, address indexed recipient, uint amount);
 
-    constructor(bool _paused) Pausable(_paused) public {}
+    constructor(bool _paused, uint _cut) Pausable(_paused) public {
+        cut = _cut;
+    }
 
     function generateChallenge(address redeemer, bytes32 password) public view returns (bytes32 challenge) {
         require(redeemer != address(0), "Empty redeemer");
@@ -31,7 +34,7 @@ contract Remittance is Pausable {
     * challenge is the ID of the grant
     */
     function grant(bytes32 challenge, uint8 claimableAfterNHours) public payable whenNotPaused {
-        require(msg.value > 0, "Funds required");
+        require(msg.value > cut, "Grant should be greater than our cut");
         //prevents locking bad formatted grant
         require(challenge != 0, "Empty challenge");
         //prevents reusing same secrets
@@ -39,10 +42,11 @@ contract Remittance is Pausable {
         //prevents badly formatted construction
         require(claimableAfterNHours < MAX_CLAIMABLE_AFTER_N_HOURS, "Claim period should be less than 24 hours");
 
-        grants[challenge].amount = msg.value;
+        uint amount = msg.value - cut;
+        grants[challenge].amount = amount;
         grants[challenge].sender = msg.sender;
         grants[challenge].claimableDate = now + claimableAfterNHours * 1 hours;
-        emit GrantEvent(challenge, msg.sender, msg.value, grants[challenge].claimableDate);
+        emit GrantEvent(challenge, msg.sender, amount, grants[challenge].claimableDate);
     }
 
     /*
