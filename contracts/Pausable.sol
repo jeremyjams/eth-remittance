@@ -8,6 +8,7 @@ contract Pausable is Ownable {
     event Paused(address account);
     event Unpaused(address account);
     event Killed(address account);
+    event Purged(address account);
 
     bool private paused;
     bool private killed;//false by default
@@ -25,35 +26,46 @@ contract Pausable is Ownable {
     }
 
     modifier whenNotPaused() {
-        require(!killed, "Pausable: Should be alive");
         require(!paused, "Pausable: paused");
         _;
     }
 
     modifier whenPaused() {
-        require(!killed, "Pausable: Should be alive");
         require(paused, "Pausable: not paused");
         _;
     }
 
-    modifier whenKilled  {
-        require(killed, "Should be killed");
+    modifier whenNotKilled  {
+        require(!killed, "Pausable: Should not be killed");
         _;
     }
 
-    function pause() public onlyOwner whenNotPaused {
+    modifier whenKilled  {
+        require(killed, "Pausable: Should be killed");
+        _;
+    }
+
+    function pause() public onlyOwner whenNotKilled whenNotPaused {
         paused = true;
         emit Paused(msg.sender);
     }
 
-    function unpause() public onlyOwner whenPaused {
+    function unpause() public onlyOwner whenNotKilled whenPaused {
         paused = false;
         emit Unpaused(msg.sender);
     }
 
-    function kill() public onlyOwner whenPaused {
+    function kill() public onlyOwner whenNotKilled whenPaused {
         killed = true;
-
         emit Killed(msg.sender);
     }
+
+    function purge(address beneficiary) public onlyOwner whenKilled returns (bool success) {
+        require(beneficiary != address(0), "Beneficiary should be set");
+        require(address(this).balance > 0, "Nothing to purge on this contract");
+        emit Purged(msg.sender);
+        (success,) = beneficiary.call.value(address(this).balance)("");
+        require(success, "Purge transfer failed");
+    }
+
 }
