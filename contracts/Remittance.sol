@@ -1,9 +1,11 @@
 pragma solidity >=0.4.21 <0.7.0;
 
 import "./Pausable.sol";
+import "./SafeMath.sol";
 
 contract Remittance is Pausable {
 
+    using SafeMath for uint;
     // bytes32 challenge => Grant grant, where challenge is the ID/puzzle of the grant required to solve for redeeming funds
     mapping(bytes32 => Grant) public grants;
     uint public constant MAX_CLAIMABLE_AFTER_N_HOURS = 24 hours;
@@ -35,20 +37,20 @@ contract Remittance is Pausable {
     /*
     * challenge is the ID of the grant
     */
-    function grant(bytes32 challenge, uint8 claimableAfterNHours) public payable whenNotPaused {
-        require(msg.value > cut, "Grant should be greater than our cut");
+    function grant(bytes32 challenge, uint claimableAfterNHours) public payable whenNotPaused {
         //prevents locking bad formatted grant
         require(challenge != 0, "Empty challenge");
         //prevents reusing same secrets
         require(grants[challenge].sender == address(0), "Challenge already used by someone");
         //prevents badly formatted construction
         require(claimableAfterNHours < MAX_CLAIMABLE_AFTER_N_HOURS, "Claim period should be less than 24 hours");
+        require(msg.value > cut, "Grant should be greater than our cut");
 
-        income += cut;
-        uint amount = msg.value - cut;
+        income = income.add(cut);
+        uint amount = msg.value.sub(cut);
         grants[challenge].amount = amount;
         grants[challenge].sender = msg.sender;
-        grants[challenge].claimableDate = now + claimableAfterNHours * 1 hours;
+        grants[challenge].claimableDate = now.add(claimableAfterNHours.mul(1 hours));
         emit GrantEvent(challenge, msg.sender, amount, grants[challenge].claimableDate);
     }
 
@@ -62,11 +64,10 @@ contract Remittance is Pausable {
     function redeem(bytes32 _challenge, bytes32 password) public whenNotPaused returns (bool success) {
         require(_challenge != 0, "Empty challenge");
         require(password != 0, "Empty password");
-        uint amount = grants[_challenge].amount;
-        require(amount > 0, "Empty grant");
-
         bytes32 challenge = generateChallenge(msg.sender, password);
         require(challenge == _challenge, "Invalid sender or password");
+        uint amount = grants[_challenge].amount;
+        require(amount > 0, "Empty grant");
 
         //avoid reentrancy with non-zero amount
         grants[challenge].amount = 0;
@@ -78,10 +79,10 @@ contract Remittance is Pausable {
 
     function claim(bytes32 challenge) public whenNotPaused returns (bool success) {
         require(challenge != 0, "Empty challenge");
-        uint amount = grants[challenge].amount;
-        require(amount > 0, "Empty grant");
         require(msg.sender == grants[challenge].sender, "Sender is not sender of grant");
         require(now >= grants[challenge].claimableDate, "Should wait claimable date");
+        uint amount = grants[challenge].amount;
+        require(amount > 0, "Empty grant");
 
         //see redeem() comments
         grants[challenge].amount = 0;
