@@ -45,7 +45,7 @@ contract Pausable is Ownable {
         _;
     }
 
-    function pause() public onlyOwner whenNotKilled whenNotPaused {
+    function pause() public onlyOwner whenNotPaused {
         paused = true;
         emit Paused(msg.sender);
     }

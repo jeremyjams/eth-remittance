@@ -16,7 +16,7 @@ const CUT = 1;
 contract("Remittance", accounts => {
     describe("Testing Remittance contract", () => {
 
-        let remittance, deployCost, alice, bob, carol, anyone, claimableAfterTwelveHours, password, hexPassword, challenge;
+        let remittance, deployCost, alice, bob, carol, david, anyone, claimableAfterTwelveHours, password, hexPassword, challenge;
 
         before("Deploy to estimate gas cost", async () => {
             claimableAfterTwelveHours = TWELVE;
@@ -34,6 +34,7 @@ contract("Remittance", accounts => {
             alice = accounts[0]
             bob = accounts[1]
             carol = accounts[2]
+            david = accounts[3]
             anyone = accounts[9]
 
             // deploy Remittance
@@ -177,6 +178,64 @@ contract("Remittance", accounts => {
                 await truffleAssert.reverts(
                     remittance.claim(challenge, {from: alice}),
                     "Sender is not sender of grant"
+                );
+            });
+        });
+
+        describe("Withdraw Income", () => {
+            it("should withdraw income", async () => {
+                // grant
+                await remittance.grant(challenge, claimableAfterTwelveHours, {from: anyone, value: GRANT_AMOUNT});
+
+                // withdrawIncome
+                const balanceBefore = await web3.eth.getBalance(carol);
+                const receipt = await remittance.withdrawIncome({from: carol});
+
+                // check withdrawIncome
+                truffleAssert.eventEmitted(receipt, 'WithdrawIncomeEvent', { owner: carol, amount: toBN(1) });
+
+                // withdrawIncome amount
+                const withdrawIncomeGasUsed = receipt.receipt.gasUsed;
+                const tx = await web3.eth.getTransaction(receipt.tx);
+                const withdrawIncomeGasPrice = tx.gasPrice;
+                const withdrawIncomeCost = toBN(withdrawIncomeGasUsed).mul(toBN(withdrawIncomeGasPrice));
+                const balanceAfter = await web3.eth.getBalance(carol);
+                const effectiveWithdrawIncome = toBN(balanceAfter).sub(toBN(balanceBefore))
+                     .add(toBN(withdrawIncomeCost)).toString(10);
+                assert.strictEqual(effectiveWithdrawIncome.toString(10), "1");
+            });
+            it("should withdraw income since new owner has income made by previous owner", async () => {
+                // grant
+                await remittance.grant(challenge, claimableAfterTwelveHours, {from: anyone, value: GRANT_AMOUNT});
+
+                // change owner
+                await remittance.transferOwnership(david, {from: carol});
+
+                // withdrawIncome
+                const balanceBefore = await web3.eth.getBalance(david);
+                const receipt = await remittance.withdrawIncome({from: david});
+
+                // check withdrawIncome
+                truffleAssert.eventEmitted(receipt, 'WithdrawIncomeEvent', { owner: david, amount: toBN(1) });
+
+                // withdrawIncome amount
+                const withdrawIncomeGasUsed = receipt.receipt.gasUsed;
+                const tx = await web3.eth.getTransaction(receipt.tx);
+                const withdrawIncomeGasPrice = tx.gasPrice;
+                const withdrawIncomeCost = toBN(withdrawIncomeGasUsed).mul(toBN(withdrawIncomeGasPrice));
+                const balanceAfter = await web3.eth.getBalance(david);
+                const effectiveWithdrawIncome = toBN(balanceAfter).sub(toBN(balanceBefore))
+                     .add(toBN(withdrawIncomeCost)).toString(10);
+                assert.strictEqual(effectiveWithdrawIncome.toString(10), "1");
+            });
+            it("should not withdraw income since wrong owner", async () => {
+                //grant
+                await remittance.grant(challenge, claimableAfterTwelveHours, {from: alice, value: GRANT_AMOUNT});
+
+                // claim
+                await truffleAssert.reverts(
+                    remittance.withdrawIncome({from: anyone}),
+                    "Ownable: caller is not the owner"
                 );
             });
         });

@@ -8,6 +8,7 @@ contract Remittance is Pausable {
     mapping(bytes32 => Grant) public grants;
     uint public constant MAX_CLAIMABLE_AFTER_N_HOURS = 24 hours;
     uint public cut;
+    uint public income;
 
     struct Grant {
         address sender;
@@ -18,6 +19,7 @@ contract Remittance is Pausable {
     event GrantEvent(bytes32 indexed challenge, address indexed sender, uint amount, uint claimableDate);
     event RedeemEvent(bytes32 indexed challenge, address indexed recipient, uint amount);
     event ClaimEvent(bytes32 indexed challenge, address indexed recipient, uint amount);
+    event WithdrawIncomeEvent(address indexed owner, uint amount);
 
     constructor(bool _paused, uint _cut) Pausable(_paused) public {
         cut = _cut;
@@ -42,6 +44,7 @@ contract Remittance is Pausable {
         //prevents badly formatted construction
         require(claimableAfterNHours < MAX_CLAIMABLE_AFTER_N_HOURS, "Claim period should be less than 24 hours");
 
+        income += cut;
         uint amount = msg.value - cut;
         grants[challenge].amount = amount;
         grants[challenge].sender = msg.sender;
@@ -85,6 +88,18 @@ contract Remittance is Pausable {
         emit ClaimEvent(challenge, msg.sender, amount);
         (success,) = msg.sender.call.value(amount)("");
         require(success, "Claim transfer failed");
+    }
+
+    /*
+     * Income goes to current owner
+     */
+    function withdrawIncome() public onlyOwner whenNotPaused returns (bool success) {
+        require(income > 0, "Empty income");
+        uint amount = income;
+        income = 0;
+        emit WithdrawIncomeEvent(msg.sender, amount);
+        (success,) = msg.sender.call.value(amount)("");
+        require(success, "WithdrawIncome transfer failed");
     }
 
 }
