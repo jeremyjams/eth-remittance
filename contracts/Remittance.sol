@@ -10,7 +10,8 @@ contract Remittance is Pausable {
     mapping(bytes32 => Grant) public grants;
     uint public constant MAX_CLAIMABLE_AFTER_N_HOURS = 24 hours;
     uint public cut;
-    uint public income;
+    // address owner => uint income, where an owner can withdraw its income
+    mapping(address => uint) public incomes;
 
     struct Grant {
         address sender;
@@ -21,7 +22,8 @@ contract Remittance is Pausable {
     event GrantEvent(bytes32 indexed challenge, address indexed sender, uint amount, uint claimableDate);
     event RedeemEvent(bytes32 indexed challenge, address indexed recipient, uint amount);
     event ClaimEvent(bytes32 indexed challenge, address indexed recipient, uint amount);
-    event WithdrawIncomeEvent(address indexed owner, uint amount);
+    event NewIncomeEvent(address indexed owner, uint income);
+    event WithdrawIncomeEvent(address indexed owner, uint income);
 
     constructor(bool _paused, uint _cut) Pausable(_paused) public {
         cut = _cut;
@@ -46,8 +48,16 @@ contract Remittance is Pausable {
         require(claimableAfterNHours < MAX_CLAIMABLE_AFTER_N_HOURS, "Claim period should be less than 24 hours");
         require(msg.value > cut, "Grant should be greater than our cut");
 
-        income = income.add(cut);
-        uint amount = msg.value.sub(cut);
+        uint amount;
+        if(cut > 0){
+            address owner = owner();
+            incomes[owner] = incomes[owner].add(cut);
+            emit NewIncomeEvent(owner, cut);
+            amount = msg.value.sub(cut);
+        } else {
+            amount = msg.value;
+        }
+
         grants[challenge].amount = amount;
         grants[challenge].sender = msg.sender;
         grants[challenge].claimableDate = now.add(claimableAfterNHours.mul(1 hours));
@@ -92,14 +102,14 @@ contract Remittance is Pausable {
     }
 
     /*
-     * Income goes to current owner
+     * Anyone with income can withdraw it
      */
-    function withdrawIncome() public onlyOwner whenNotPaused returns (bool success) {
+    function withdrawIncome() public whenNotPaused returns (bool success) {
+        uint income = incomes[msg.sender];
         require(income > 0, "Empty income");
-        uint amount = income;
-        income = 0;
-        emit WithdrawIncomeEvent(msg.sender, amount);
-        (success,) = msg.sender.call.value(amount)("");
+        incomes[msg.sender] = 0;
+        emit WithdrawIncomeEvent(msg.sender, income);
+        (success,) = msg.sender.call.value(income)("");
         require(success, "WithdrawIncome transfer failed");
     }
 

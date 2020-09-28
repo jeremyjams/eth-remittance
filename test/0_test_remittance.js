@@ -59,13 +59,26 @@ contract("Remittance", accounts => {
 
         describe("Grant", () => {
             it("should grant", async () => {
+                remittance = await Remittance.new(false, 0, {from: carol});
                 //grant
                 const grantReceipt = await remittance.grant(challenge, claimableAfterTwelveHours, {from: alice, value: GRANT_AMOUNT});
                 const lastBlock = await web3.eth.getBlock("latest")
                 const now = lastBlock.timestamp
 
                 truffleAssert.eventEmitted(grantReceipt, 'GrantEvent', { challenge: challenge, sender: alice,
-                    amount: toBN(1), claimableDate: toBN(now + 12 * 3600) }); //move to grant test
+                    amount: toBN(2), claimableDate: toBN(now + 12 * 3600) });
+                const grant = await remittance.grants(challenge);
+                assert.strictEqual(grant.amount.toString(10), "2", "Grant amount should be 2");
+            });
+            it("should grant with cut", async () => {
+                //grant
+                const grantReceipt = await remittance.grant(challenge, claimableAfterTwelveHours, {from: alice, value: GRANT_AMOUNT});
+                const lastBlock = await web3.eth.getBlock("latest")
+                const now = lastBlock.timestamp
+
+                truffleAssert.eventEmitted(grantReceipt, 'GrantEvent', { challenge: challenge, sender: alice,
+                    amount: toBN(1), claimableDate: toBN(now + 12 * 3600) });
+                truffleAssert.eventEmitted(grantReceipt, 'NewIncomeEvent', { owner: carol, income: toBN(1) });
                 const grant = await remittance.grants(challenge);
                 assert.strictEqual(grant.amount.toString(10), "1", "Grant amount should be 1");
             });
@@ -192,7 +205,7 @@ contract("Remittance", accounts => {
                 const receipt = await remittance.withdrawIncome({from: carol});
 
                 // check withdrawIncome
-                truffleAssert.eventEmitted(receipt, 'WithdrawIncomeEvent', { owner: carol, amount: toBN(1) });
+                truffleAssert.eventEmitted(receipt, 'WithdrawIncomeEvent', { owner: carol, income: toBN(1) });
 
                 // withdrawIncome amount
                 const withdrawIncomeGasUsed = receipt.receipt.gasUsed;
@@ -204,30 +217,6 @@ contract("Remittance", accounts => {
                      .add(toBN(withdrawIncomeCost)).toString(10);
                 assert.strictEqual(effectiveWithdrawIncome.toString(10), "1");
             });
-            it("should withdraw income since new owner has income made by previous owner", async () => {
-                // grant
-                await remittance.grant(challenge, claimableAfterTwelveHours, {from: anyone, value: GRANT_AMOUNT});
-
-                // change owner
-                await remittance.transferOwnership(david, {from: carol});
-
-                // withdrawIncome
-                const balanceBefore = await web3.eth.getBalance(david);
-                const receipt = await remittance.withdrawIncome({from: david});
-
-                // check withdrawIncome
-                truffleAssert.eventEmitted(receipt, 'WithdrawIncomeEvent', { owner: david, amount: toBN(1) });
-
-                // withdrawIncome amount
-                const withdrawIncomeGasUsed = receipt.receipt.gasUsed;
-                const tx = await web3.eth.getTransaction(receipt.tx);
-                const withdrawIncomeGasPrice = tx.gasPrice;
-                const withdrawIncomeCost = toBN(withdrawIncomeGasUsed).mul(toBN(withdrawIncomeGasPrice));
-                const balanceAfter = await web3.eth.getBalance(david);
-                const effectiveWithdrawIncome = toBN(balanceAfter).sub(toBN(balanceBefore))
-                     .add(toBN(withdrawIncomeCost)).toString(10);
-                assert.strictEqual(effectiveWithdrawIncome.toString(10), "1");
-            });
             it("should not withdraw income since wrong owner", async () => {
                 //grant
                 await remittance.grant(challenge, claimableAfterTwelveHours, {from: alice, value: GRANT_AMOUNT});
@@ -235,7 +224,7 @@ contract("Remittance", accounts => {
                 // claim
                 await truffleAssert.reverts(
                     remittance.withdrawIncome({from: anyone}),
-                    "Ownable: caller is not the owner"
+                    "Empty income"
                 );
             });
         });
