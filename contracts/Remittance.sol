@@ -71,16 +71,14 @@ contract Remittance is Pausable {
     * since with it Carol would need to brut force password for all existing public challenges
     *
     */
-    function redeem(bytes32 _challenge, bytes32 password) public whenNotPaused returns (bool success) {
-        require(_challenge != 0, "Empty challenge");
-        require(password != 0, "Empty password");
+    function redeem(bytes32 password) public whenNotPaused returns (bool success) {
         bytes32 challenge = generateChallenge(msg.sender, password);
-        require(challenge == _challenge, "Invalid sender or password");
-        uint amount = grants[_challenge].amount;
+        uint amount = grants[challenge].amount;
         require(amount > 0, "Empty grant");
 
         //avoid reentrancy with non-zero amount
         grants[challenge].amount = 0;
+        grants[challenge].claimableDate = 0;
         //dont clear grant.sender to avoid reusing same secrets
         emit RedeemEvent(challenge, msg.sender, amount);
         (success,) = msg.sender.call.value(amount)("");
@@ -89,10 +87,10 @@ contract Remittance is Pausable {
 
     function claim(bytes32 challenge) public whenNotPaused returns (bool success) {
         require(challenge != 0, "Empty challenge");
-        require(msg.sender == grants[challenge].sender, "Sender is not sender of grant");
-        require(now >= grants[challenge].claimableDate, "Should wait claimable date");
         uint amount = grants[challenge].amount;
         require(amount > 0, "Empty grant");
+        require(msg.sender == grants[challenge].sender, "Sender is not sender of grant");
+        require(now >= grants[challenge].claimableDate, "Should wait claimable date");
 
         //see redeem() comments
         grants[challenge].amount = 0;

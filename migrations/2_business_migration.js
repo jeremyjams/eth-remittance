@@ -1,7 +1,7 @@
 const Remittance = artifacts.require("Remittance");
-const { BN, toBN, soliditySha3 } = web3.utils
+const { BN, toBN, soliditySha3, toWei } = web3.utils
 const ETH_CUT = '0.01';
-const CUT = web3.utils.toWei(ETH_CUT, 'ether');
+const CUT = toWei(ETH_CUT, 'ether');
 
 module.exports = function(deployer) {
   deployer.deploy(Remittance, true, CUT);
