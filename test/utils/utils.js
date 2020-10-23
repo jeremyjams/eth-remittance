@@ -1,3 +1,4 @@
+/* Using www.npmjs.com/package/ganache-time-traveler now */
 //https://medium.com/fluidity/standing-the-time-of-test-b906fcc374a9
 
 advanceTime = (time) => {

@@ -1,49 +1,111 @@
 const Remittance = artifacts.require("./Remittance.sol");
 const helper = require('./utils/utils.js');
 const truffleAssert = require('truffle-assertions');
+const timeMachine = require('ganache-time-traveler');
 
-const { BN, toBN, soliditySha3 } = web3.utils
+const { BN, toBN, soliditySha3, fromWei, padRight, asciiToHex } = web3.utils
 require('chai').use(require('chai-bn')(BN)).should();
 
 const HOURS = 3600;
-const TWELVE = 12;
+const CLAIMABLE_AFTER_12_HOURS = 12;
+const GRANT_AMOUNT = 2;
+const CUT = 1;
 
 // ganache-cli --accounts=10 --host=0.0.0.0
 
 contract("Remittance", accounts => {
     describe("Testing Remittance contract", () => {
 
-        let splitter, alice, bob, carol, anyone, remittance, claimableAfterNHours, secret1, secret2, secret1Hex, secret2Hex, redeemSecretHash;
+        let remittance, challenge;
+        // accounts
+        const [ alice, bob, carol, david, anyone ] = accounts;
+        // challenge & password
+        let password = "p4ssw0rd";
+        let hexPassword = padRight(asciiToHex(password), 64);
+
+        before("Deploy to estimate gas cost", async () => {
+            const balanceBefore = await web3.eth.getBalance(accounts[0]);
+            remittance = await Remittance.new(false, 0, {from: accounts[0]});
+            const balanceAfter = await web3.eth.getBalance(accounts[0]);
+            const deployCost = toBN(balanceBefore).sub(toBN(balanceAfter));
+            console.log("Deploy cost:   " + fromWei(deployCost.toString(10), 'ether') + "ETH")
+            console.log("Cut cost:      " + fromWei(CUT.toString(10), 'ether') + "ETH")
+        });
 
         beforeEach("Fresh contract & accounts", async () => {
-            // accounts
-            alice = accounts[0]
-            bob = accounts[1]
-            carol = accounts[2]
-            anyone = accounts[9]
-
-            // secret hashes
-            secret1 = "a";
-            secret2 = "b";
-            secret1Hex = web3.utils.padRight(web3.utils.asciiToHex(secret1), 64);
-            secret2Hex = web3.utils.padRight(web3.utils.asciiToHex(secret2), 64);
-            redeemSecretHash = soliditySha3(secret1Hex, secret2Hex);
-
             // deploy Remittance
-            claimableAfterNHours = TWELVE;
-            remittance = await Remittance.new(redeemSecretHash, claimableAfterNHours, false, {from: alice, value: 1})
-            const contractBalance = await web3.eth.getBalance(remittance.address)
-            assert.strictEqual(contractBalance.toString(10), "1", "Contract balance should be 1");
+            remittance = await Remittance.new(false, CUT, {from: carol});
+            // challenge
+            challenge = await remittance.generateChallenge.call(carol, hexPassword);
+        });
+
+        describe("Challenge", () => {
+            it("should generate challenge", async () => {
+                const expectedChallenge = soliditySha3(remittance.address, carol, hexPassword);
+                assert.strictEqual(challenge, expectedChallenge, "Generated challenge should be valid");
+            });
+            it("should generate salted challenges with same parameters", async () => {
+                let anotherRemittance = await Remittance.new(false, CUT, {from: carol});
+                assert.notEqual( soliditySha3(remittance.address, carol, hexPassword),
+                    soliditySha3(anotherRemittance.address, carol, hexPassword), "Generated challenge should be different");
+            });
+        });
+
+        describe("Grant", () => {
+            it("should grant", async () => {
+                remittance = await Remittance.new(false, 0, {from: carol});
+                //grant
+                const grantReceipt = await remittance.grant(challenge, CLAIMABLE_AFTER_12_HOURS, {from: alice, value: GRANT_AMOUNT});
+                const lastBlock = await web3.eth.getBlock(grantReceipt.receipt.blockNumber)
+                const now = lastBlock.timestamp
+
+                truffleAssert.eventEmitted(grantReceipt, 'GrantEvent', { challenge: challenge, sender: alice,
+                    amount: toBN(2), claimableDate: toBN(now + 12 * 3600) });
+                const grant = await remittance.grants(challenge);
+                assert.strictEqual(grant.amount.toString(10), "2", "Grant amount should be 2");
+            });
+            it("should grant with cut", async () => {
+                //grant
+                const grantReceipt = await remittance.grant(challenge, CLAIMABLE_AFTER_12_HOURS, {from: alice, value: GRANT_AMOUNT});
+                const lastBlock = await web3.eth.getBlock(grantReceipt.receipt.blockNumber)
+                const now = lastBlock.timestamp
+
+                truffleAssert.eventEmitted(grantReceipt, 'GrantEvent', { challenge: challenge, sender: alice,
+                    amount: toBN(1), claimableDate: toBN(now + 12 * 3600) });
+                truffleAssert.eventEmitted(grantReceipt, 'NewIncomeEvent', { owner: carol, income: toBN(1) });
+                const grant = await remittance.grants(challenge);
+                assert.strictEqual(grant.amount.toString(10), "1", "Grant amount should be 1");
+            });
+            it("should not grant since grant lower than cut", async () => {
+                // grant with already used challenge
+                await truffleAssert.reverts(
+                    remittance.grant(challenge, CLAIMABLE_AFTER_12_HOURS, {from: anyone, value: 1}),
+                    "Grant should be greater than our cut"
+                );
+            });
+            it("should not grant since already use challenge", async () => {
+                // grant
+                const grantReceipt = await remittance.grant(challenge, CLAIMABLE_AFTER_12_HOURS, {from: alice, value: GRANT_AMOUNT});
+
+                // grant with already used challenge
+                await truffleAssert.reverts(
+                    remittance.grant(challenge, CLAIMABLE_AFTER_12_HOURS, {from: anyone, value: GRANT_AMOUNT}),
+                    "Challenge already used by someone"
+                );
+            });
         });
 
         describe("Redeem", () => {
             it("should redeem", async () => {
+                //grant
+                await remittance.grant(challenge, CLAIMABLE_AFTER_12_HOURS, {from: alice, value: GRANT_AMOUNT});
+
                 // redeem
                 const balanceBefore = await web3.eth.getBalance(carol);
-                const receipt = await remittance.redeem(secret1Hex, secret2Hex, {from: carol});
+                const receipt = await remittance.redeem(hexPassword, {from: carol});
 
                 // check redeem
-                truffleAssert.eventEmitted(receipt, 'RedeemEvent', { recipient: carol, amount: toBN(1) });
+                truffleAssert.eventEmitted(receipt, 'RedeemEvent', { challenge: challenge, recipient: carol, amount: toBN(1) });
 
                 // redeem amount
                 const redeemGasUsed = receipt.receipt.gasUsed;
@@ -55,22 +117,43 @@ contract("Remittance", accounts => {
                     .add(toBN(redeemCost)).toString(10);
                 assert.strictEqual(effectiveRedeem.toString(10), "1");
             });
-            it("should not redeem since", async () => {
-                //TODO
+            it("should not redeem since bad sender", async () => {
+                //grant
+                await remittance.grant(challenge, CLAIMABLE_AFTER_12_HOURS, {from: alice, value: GRANT_AMOUNT});
+
+                // redeem
+                await truffleAssert.reverts(
+                    remittance.redeem(hexPassword, {from: anyone}),
+                    "Empty grant"
+                );
+            });
+            it("should not redeem since bad password", async () => {
+                //grant
+                await remittance.grant(challenge, CLAIMABLE_AFTER_12_HOURS, {from: alice, value: GRANT_AMOUNT});
+
+                // redeem
+                badHexPassword = padRight(asciiToHex("b4dpwd"), 64);
+                await truffleAssert.reverts(
+                    remittance.redeem(badHexPassword, {from: carol}),
+                    "Empty grant"
+                );
             });
         });
 
         describe("Claim", () => {
             it("should claim", async () => {
+                //grant
+                await remittance.grant(challenge, CLAIMABLE_AFTER_12_HOURS, {from: alice, value: GRANT_AMOUNT});
+
                 // time travel to claimable date
-                await helper.advanceTimeAndBlock(TWELVE * HOURS);
+                await timeMachine.advanceTimeAndBlock(CLAIMABLE_AFTER_12_HOURS * HOURS);
 
                 // claim
                 const balanceBefore = await web3.eth.getBalance(alice);
-                const receipt = await remittance.claim({from: alice});
+                const receipt = await remittance.claim(challenge, {from: alice});
 
                 // check claim
-                truffleAssert.eventEmitted(receipt, 'ClaimEvent', { recipient: alice, amount: toBN(1) });
+                truffleAssert.eventEmitted(receipt, 'ClaimEvent', { challenge: challenge, recipient: alice, amount: toBN(1) });
 
                 // claim amount
                 const claimGasUsed = receipt.receipt.gasUsed;
@@ -82,8 +165,61 @@ contract("Remittance", accounts => {
                      .add(toBN(claimCost)).toString(10);
                 assert.strictEqual(effectiveClaim.toString(10), "1");
             });
-            it("should not claim since", async () => {
-                //TODO
+            it("should not claim since not after clamable date", async () => {
+                //grant
+                await remittance.grant(challenge, CLAIMABLE_AFTER_12_HOURS, {from: alice, value: GRANT_AMOUNT});
+
+                // claim
+                const balanceBefore = await web3.eth.getBalance(alice);
+                await truffleAssert.reverts(
+                    remittance.claim(challenge, {from: alice}),
+                    "Should wait claimable date"
+                );
+            });
+            it("should not claim since not sender of grant", async () => {
+                //grant
+                await remittance.grant(challenge, CLAIMABLE_AFTER_12_HOURS, {from: anyone, value: GRANT_AMOUNT});
+
+                // claim
+                const balanceBefore = await web3.eth.getBalance(alice);
+                await truffleAssert.reverts(
+                    remittance.claim(challenge, {from: alice}),
+                    "Sender is not sender of grant"
+                );
+            });
+        });
+
+        describe("Withdraw Income", () => {
+            it("should withdraw income", async () => {
+                // grant
+                await remittance.grant(challenge, CLAIMABLE_AFTER_12_HOURS, {from: anyone, value: GRANT_AMOUNT});
+
+                // withdrawIncome
+                const balanceBefore = await web3.eth.getBalance(carol);
+                const receipt = await remittance.withdrawIncome({from: carol});
+
+                // check withdrawIncome
+                truffleAssert.eventEmitted(receipt, 'WithdrawIncomeEvent', { owner: carol, income: toBN(1) });
+
+                // withdrawIncome amount
+                const withdrawIncomeGasUsed = receipt.receipt.gasUsed;
+                const tx = await web3.eth.getTransaction(receipt.tx);
+                const withdrawIncomeGasPrice = tx.gasPrice;
+                const withdrawIncomeCost = toBN(withdrawIncomeGasUsed).mul(toBN(withdrawIncomeGasPrice));
+                const balanceAfter = await web3.eth.getBalance(carol);
+                const effectiveWithdrawIncome = toBN(balanceAfter).sub(toBN(balanceBefore))
+                     .add(toBN(withdrawIncomeCost)).toString(10);
+                assert.strictEqual(effectiveWithdrawIncome.toString(10), "1");
+            });
+            it("should not withdraw income since wrong owner", async () => {
+                //grant
+                await remittance.grant(challenge, CLAIMABLE_AFTER_12_HOURS, {from: alice, value: GRANT_AMOUNT});
+
+                // claim
+                await truffleAssert.reverts(
+                    remittance.withdrawIncome({from: anyone}),
+                    "Empty income"
+                );
             });
         });
 
