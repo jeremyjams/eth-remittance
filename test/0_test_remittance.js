@@ -1,4 +1,4 @@
-const Remittance = artifacts.require("./Remittance.sol");
+const Remittance = artifacts.require("./GrantHub.sol");
 const helper = require('./utils/utils.js');
 const truffleAssert = require('truffle-assertions');
 const timeMachine = require('ganache-time-traveler');
@@ -50,7 +50,7 @@ contract("Remittance", accounts => {
                     soliditySha3(anotherRemittance.address, carol, hexPassword), "Generated challenge should be different");
             });
         });
-
+        /*
         describe("Grant", () => {
             it("should grant", async () => {
                 remittance = await Remittance.new(false, 0, {from: carol});
@@ -222,6 +222,7 @@ contract("Remittance", accounts => {
                 );
             });
         });
+        */
 
     });
 });
