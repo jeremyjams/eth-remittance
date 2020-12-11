@@ -8,6 +8,10 @@ contract Grant is Ownable{
 
     using SafeMath for uint;
 
+    // Equals to `bytes4(keccak256("generateChallenge(address,bytes32)"))`
+    // which can be also obtained as `GrantHub(grantHubAddress).generateChallenge.selector`
+    bytes4 private constant GRANT_HUB_GENERATE_CHALLENGE_SELECTOR = 0x8ad3353b;
+
     address grantHubAddress;
     bytes32 challenge;
     uint claimableDate;
@@ -25,7 +29,11 @@ contract Grant is Ownable{
     }
 
     function redeem(bytes32 password) public returns (bool success) {
-        bytes32 challenge = GrantHub(grantHubAddress).generateChallenge(msg.sender, password);
+        //bytes32 challenge = GrantHub(grantHubAddress).generateChallenge(msg.sender, password); //to avoid
+        (bool isChallengeGenerated, bytes memory returnedData) = grantHubAddress
+            .call(abi.encodeWithSelector(GRANT_HUB_GENERATE_CHALLENGE_SELECTOR, msg.sender, password));
+        require(isChallengeGenerated, "Internal call failed: hub.generateChallenge(redeemer, password)");
+        require(abi.decode(returnedData, (bytes32)) == challenge, "Bad password");
         uint amount = address(this).balance;
         require(amount > 0, "Empty grant");
 

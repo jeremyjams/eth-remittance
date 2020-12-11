@@ -28,8 +28,9 @@ contract("Remittance", accounts => {
             remittance = await Remittance.new(false, 0, {from: accounts[0]});
             const balanceAfter = await web3.eth.getBalance(accounts[0]);
             const deployCost = toBN(balanceBefore).sub(toBN(balanceAfter));
-            console.log("Deploy cost:   " + fromWei(deployCost.toString(10), 'ether') + "ETH")
-            console.log("Cut cost:      " + fromWei(CUT.toString(10), 'ether') + "ETH")
+            console.log("Deploy cost:             " + fromWei(deployCost.toString(10), 'ether') + "ETH")
+            console.log("Cut cost:                " + fromWei(CUT.toString(10), 'ether') + "ETH")
+            console.log("generateChall. selector: " + soliditySha3("generateChallenge(address,bytes32)"))
         });
 
         beforeEach("Fresh contract & accounts", async () => {
