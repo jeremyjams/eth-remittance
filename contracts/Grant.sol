@@ -12,16 +12,17 @@ contract Grant is Ownable{
     // which can be also obtained as `GrantHub(grantHubAddress).generateChallenge.selector`
     bytes4 private constant GRANT_HUB_GENERATE_CHALLENGE_SELECTOR = 0x8ad3353b;
 
-    address grantHubAddress;
-    bytes32 challenge;
-    uint claimableDate;
+    address payable grantHubAddress;
+    uint public amount;
+    bytes32 public challenge;
+    uint public claimableDate;
 
-    event RedeemEvent(bytes32 indexed challenge, address indexed recipient, uint amount);
-    event ClaimEvent(bytes32 indexed challenge, address indexed recipient, uint amount);
-    event WithdrawIncomeEvent(address indexed owner, uint income);
+    event RedeemEvent(address indexed sender, uint amount, bytes32 indexed challenge);
+    event ClaimEvent(address indexed sender, uint amount, bytes32 indexed challenge);
 
     constructor(address _granter, bytes32 _challenge, uint _claimableDate) public payable {
         grantHubAddress = msg.sender;
+        amount = msg.value;
         challenge = _challenge;
         claimableDate = _claimableDate;
 
@@ -34,28 +35,29 @@ contract Grant is Ownable{
             .call(abi.encodeWithSelector(GRANT_HUB_GENERATE_CHALLENGE_SELECTOR, msg.sender, password));
         require(isChallengeGenerated, "Internal call failed: hub.generateChallenge(redeemer, password)");
         require(abi.decode(returnedData, (bytes32)) == challenge, "Bad password");
-        uint amount = address(this).balance;
         require(amount > 0, "Empty grant");
 
         //avoid reentrancy with non-zero amount
+        uint value = amount;
         amount = 0;
         claimableDate = 0;
-        emit RedeemEvent(challenge, msg.sender, amount);
-        (success,) = msg.sender.call.value(amount)("");
+        emit RedeemEvent(msg.sender, value, challenge);
+        (success,) = msg.sender.call.value(value)("");
         require(success, "Redeem transfer failed");
+        selfdestruct(grantHubAddress);
     }
 
     function claim() public returns (bool success) {
         require(challenge != 0, "Empty challenge");
-        uint amount = address(this).balance;
         require(amount > 0, "Empty grant");
         require(msg.sender == owner(), "Sender is not sender of grant");
         require(now >= claimableDate, "Should wait claimable date");
 
+        uint value = amount;
         amount = 0;
         claimableDate = 0;
-        emit ClaimEvent(challenge, msg.sender, amount);
-        (success,) = msg.sender.call.value(amount)("");
+        emit ClaimEvent(msg.sender, value, challenge);
+        (success,) = msg.sender.call.value(value)("");
         require(success, "Claim transfer failed");
     }
 

@@ -15,9 +15,9 @@ contract GrantHub is Pausable {
     // address owner => uint income, where an owner can withdraw its income
     mapping(address => uint) public incomes;
 
-    event GrantEvent(bytes32 indexed challenge, address indexed recipient, uint amount, uint claimableDate, address indexed grantContract);
-    event NewIncomeEvent(address indexed owner, uint income);
-    event WithdrawIncomeEvent(address indexed owner, uint income);
+    event GrantEvent(address indexed sender, uint amount, bytes32 indexed challenge, uint claimableDate, address indexed grantContract);
+    event NewIncomeEvent(address indexed sender, uint amount);
+    event WithdrawIncomeEvent(address indexed sender, uint amount);
 
     constructor(bool _paused, uint _cut) Pausable(_paused) public {
         cut = _cut;
@@ -28,6 +28,11 @@ contract GrantHub is Pausable {
         require(password != 0, "Empty password");
 
         challenge = keccak256(abi.encodePacked(address(this), redeemer, password));
+    }
+
+    function setCut(uint _cut) public whenNotPaused returns (bool) {
+        cut = _cut;
+        return true;
     }
 
     /*
@@ -57,8 +62,7 @@ contract GrantHub is Pausable {
         uint claimableDate = now.add(claimableAfterNHours.mul(1 hours));
 
         Grant grant = (new Grant).value(msg.value)(msg.sender, challenge, claimableDate);
-        require(address(grant) != address(0), "Failed to create Grant contract");
-        emit GrantEvent(challenge, msg.sender, amount, claimableDate, address(grant));
+        emit GrantEvent(msg.sender, amount, challenge, claimableDate, address(grant));
         return true;
     }
 

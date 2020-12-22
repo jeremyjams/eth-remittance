@@ -1,4 +1,5 @@
 const Remittance = artifacts.require("./GrantHub.sol");
+const Grant = artifacts.require("./Grant.sol");
 const helper = require('./utils/utils.js');
 const truffleAssert = require('truffle-assertions');
 const timeMachine = require('ganache-time-traveler');
@@ -51,7 +52,7 @@ contract("Remittance", accounts => {
                     soliditySha3(anotherRemittance.address, carol, hexPassword), "Generated challenge should be different");
             });
         });
-        /*
+
         describe("Grant", () => {
             it("should grant", async () => {
                 remittance = await Remittance.new(false, 0, {from: carol});
@@ -60,20 +61,25 @@ contract("Remittance", accounts => {
                 const lastBlock = await web3.eth.getBlock(grantReceipt.receipt.blockNumber)
                 const now = lastBlock.timestamp
 
-                truffleAssert.eventEmitted(grantReceipt, 'GrantEvent', { challenge: challenge, sender: alice,
-                    amount: toBN(2), claimableDate: toBN(now + 12 * 3600) });
-                const grant = await remittance.grants(challenge);
-                assert.strictEqual(grant.amount.toString(10), "2", "Grant amount should be 2");
+                truffleAssert.eventEmitted(grantReceipt, 'GrantEvent', { sender: alice,
+                    amount: toBN(2), challenge: challenge, claimableDate: toBN(now + 12 * 3600) });
+                const isChallengeUsed = await remittance.isChallengeUsedList(challenge);
+                assert.strictEqual(isChallengeUsed, true, "Challenge shout be used");
+                const grandAddress = grantReceipt.logs[2].args.grantContract
+                const grant = await Grant.at(grandAddress);
+                const amount = await grant.amount();
+                assert.strictEqual(amount.toString(10), "2", "Grant amount should be 2");
             });
+            /*
             it("should grant with cut", async () => {
                 //grant
                 const grantReceipt = await remittance.grant(challenge, CLAIMABLE_AFTER_12_HOURS, {from: alice, value: GRANT_AMOUNT});
                 const lastBlock = await web3.eth.getBlock(grantReceipt.receipt.blockNumber)
                 const now = lastBlock.timestamp
 
-                truffleAssert.eventEmitted(grantReceipt, 'GrantEvent', { challenge: challenge, sender: alice,
-                    amount: toBN(1), claimableDate: toBN(now + 12 * 3600) });
-                truffleAssert.eventEmitted(grantReceipt, 'NewIncomeEvent', { owner: carol, income: toBN(1) });
+                truffleAssert.eventEmitted(grantReceipt, 'GrantEvent', { sender: alice,
+                    amount: toBN(1), challenge: challenge, claimableDate: toBN(now + 12 * 3600) });
+                truffleAssert.eventEmitted(grantReceipt, 'NewIncomeEvent', { sender: carol, income: toBN(1) });
                 const grant = await remittance.grants(challenge);
                 assert.strictEqual(grant.amount.toString(10), "1", "Grant amount should be 1");
             });
@@ -94,8 +100,9 @@ contract("Remittance", accounts => {
                     "Challenge already used by someone"
                 );
             });
+            */
         });
-
+        /*
         describe("Redeem", () => {
             it("should redeem", async () => {
                 //grant
@@ -106,7 +113,7 @@ contract("Remittance", accounts => {
                 const receipt = await remittance.redeem(hexPassword, {from: carol});
 
                 // check redeem
-                truffleAssert.eventEmitted(receipt, 'RedeemEvent', { challenge: challenge, recipient: carol, amount: toBN(1) });
+                truffleAssert.eventEmitted(receipt, 'RedeemEvent', { recipient: carol, amount: toBN(1), challenge: challenge});
 
                 // redeem amount
                 const redeemGasUsed = receipt.receipt.gasUsed;
@@ -154,7 +161,7 @@ contract("Remittance", accounts => {
                 const receipt = await remittance.claim(challenge, {from: alice});
 
                 // check claim
-                truffleAssert.eventEmitted(receipt, 'ClaimEvent', { challenge: challenge, recipient: alice, amount: toBN(1) });
+                truffleAssert.eventEmitted(receipt, 'ClaimEvent', { sender: alice, amount: toBN(1), challenge: challenge });
 
                 // claim amount
                 const claimGasUsed = receipt.receipt.gasUsed;
@@ -200,7 +207,7 @@ contract("Remittance", accounts => {
                 const receipt = await remittance.withdrawIncome({from: carol});
 
                 // check withdrawIncome
-                truffleAssert.eventEmitted(receipt, 'WithdrawIncomeEvent', { owner: carol, income: toBN(1) });
+                truffleAssert.eventEmitted(receipt, 'WithdrawIncomeEvent', { sender: carol, income: toBN(1) });
 
                 // withdrawIncome amount
                 const withdrawIncomeGasUsed = receipt.receipt.gasUsed;
