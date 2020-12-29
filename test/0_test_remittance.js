@@ -1,4 +1,4 @@
-const Remittance = artifacts.require("./GrantHub.sol");
+const Remittance = artifacts.require("./GlobalHub.sol");
 const Grant = artifacts.require("./Grant.sol");
 const helper = require('./utils/utils.js');
 const truffleAssert = require('truffle-assertions');
@@ -54,6 +54,7 @@ contract("Remittance", accounts => {
         });
 
         describe("Grant", () => {
+            /*
             it("should grant", async () => {
                 remittance = await Remittance.new(false, 0, {from: carol});
                 //grant
@@ -70,7 +71,6 @@ contract("Remittance", accounts => {
                 const amount = await grant.amount();
                 assert.strictEqual(amount.toString(10), "2", "Grant amount should be 2");
             });
-            /*
             it("should grant with cut", async () => {
                 //grant
                 const grantReceipt = await remittance.grant(challenge, CLAIMABLE_AFTER_12_HOURS, {from: alice, value: GRANT_AMOUNT});
